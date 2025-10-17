@@ -1,0 +1,12 @@
+{
+    "domain": "tian_holiday",
+    "name": "天聚数行-节假日",
+    "codeowners": ["@lambilly"],
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/lambilly/tian_holiday",
+    "integration_type": "device",
+    "iot_class": "cloud_polling",
+    "requirements": [],
+    "version": "1.0.0"
+}
