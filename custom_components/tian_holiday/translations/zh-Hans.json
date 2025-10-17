@@ -1,0 +1,32 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "天聚数行-节假日",
+                "description": "请输入天行数据的API密钥",
+                "data": {
+                    "api_key": "API密钥"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "无法连接到API",
+            "invalid_auth": "API密钥无效",
+            "unknown": "未知错误"
+        },
+        "abort": {
+            "already_configured": "已配置"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "天聚数行-节假日选项",
+                "description": "更新API密钥",
+                "data": {
+                    "api_key": "API密钥"
+                }
+            }
+        }
+    }
+}
