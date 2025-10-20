@@ -34,9 +34,10 @@ async def async_setup_entry(
     api_key = entry.data["api_key"]
     
     sensor = TianHolidaySensor(hass, api_key, entry)
-    await sensor.async_first_update()  # 立即执行第一次更新
-    
     async_add_entities([sensor])
+    
+    # 在实体添加到HA后执行首次更新
+    hass.async_create_task(sensor.async_first_update())
 
 
 class TianHolidaySensor(SensorEntity):
@@ -54,9 +55,16 @@ class TianHolidaySensor(SensorEntity):
             name="信息查询",
         )
         self._data = {}
-        self._update_time = ""  # 新增：更新时间字段
+        self._update_time = ""  # 只在API成功时更新
         self._retry_count = 0
         self._unsub_timer = None
+        self._is_updating = False  # 防止重复更新
+        self._added_to_hass = False  # 标记实体是否已添加到HA
+
+    @property
+    def should_poll(self) -> bool:
+        """返回False，表示此实体不轮询."""
+        return False
 
     @property
     def state(self) -> str:
@@ -67,10 +75,10 @@ class TianHolidaySensor(SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """返回额外状态属性."""
         if not self._data:
-            return {}
+            return {"update_time": self._update_time}
         
         data = self._data.copy()
-        # 添加更新时间属性
+        # 只添加已经存储的更新时间，不重新生成
         data["update_time"] = self._update_time
         
         # 展平嵌套字典
@@ -85,6 +93,8 @@ class TianHolidaySensor(SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         """当实体添加到HA时."""
+        self._added_to_hass = True  # 标记实体已添加到HA
+        
         # 设置每天00:01的定时更新
         self._unsub_timer = async_track_time_change(
             self.hass, 
@@ -94,6 +104,7 @@ class TianHolidaySensor(SensorEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         """当实体从HA移除时."""
+        self._added_to_hass = False  # 标记实体已从HA移除
         if self._unsub_timer:
             self._unsub_timer()
             self._unsub_timer = None
@@ -114,16 +125,32 @@ class TianHolidaySensor(SensorEntity):
         now = dt_util.now()
         return now.strftime("%Y-%m-%d %H:%M:%S")
 
+    def _safe_write_state(self) -> None:
+        """安全地写入状态，只在实体已添加到HA时执行."""
+        if self._added_to_hass and self.hass:
+            self.async_write_ha_state()
+        else:
+            _LOGGER.debug("实体尚未添加到HA，跳过状态写入")
+
     async def _async_update_holiday_data(self) -> None:
         """更新节假日数据."""
+        # 防止重复更新
+        if self._is_updating:
+            _LOGGER.debug("更新操作正在进行中，跳过此次请求")
+            return
+            
+        self._is_updating = True
         try:
             data = await self.fetch_holiday_data()
             if data:
                 self._data = data
-                # 更新成功时设置更新时间
+                # 只在API请求成功时更新一次时间
                 self._update_time = self._get_current_time_string()
                 self._retry_count = 0  # 成功时重置重试计数
-                self.async_write_ha_state()
+                
+                # 安全地写入状态
+                self._safe_write_state()
+                
                 _LOGGER.info("节假日数据更新成功，更新时间: %s", self._update_time)
             else:
                 raise Exception("获取到的数据为空")
@@ -131,6 +158,8 @@ class TianHolidaySensor(SensorEntity):
         except Exception as err:
             _LOGGER.error("获取节假日数据失败: %s", err)
             await self._async_handle_retry()
+        finally:
+            self._is_updating = False
 
     async def _async_handle_retry(self) -> None:
         """处理重试逻辑."""
